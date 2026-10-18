@@ -1,0 +1,642 @@
+<title>Static File Inspector</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: sticky bar · drop zone · summary · tabbed deep-analysis panels; stacks on phones */
+:root{
+  --bg:#f0f2f4; --panel:#ffffff; --sunk:#e7ebef; --line:#d2d9e0; --fg:#15202b; --muted:#5d6b78;
+  --accent:#2563a8; --accent-ink:#ffffff; --copper:#b4531a;
+  --bad:#c42b2b; --bad-bg:#fbe6e4; --warn:#a86a00; --warn-bg:#fdf1d8; --ok:#1d7a3a; --ok-bg:#e2f3e7;
+  --grid:#c3ccd4;
+  --f-display:"Space Grotesk","Segoe UI",system-ui,sans-serif;
+  --f-body:"IBM Plex Sans","Segoe UI",system-ui,sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0e141b; --panel:#161f29; --sunk:#111923; --line:#283543; --fg:#e4ecf2; --muted:#8fa0b0;
+  --accent:#5fa8e8; --accent-ink:#06182b; --copper:#e58a4e;
+  --bad:#ff7a6e; --bad-bg:#3a1714; --warn:#f2b33d; --warn-bg:#36280b; --ok:#5fd18a; --ok-bg:#12301d;
+  --grid:#2b3845; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0e141b; --panel:#161f29; --sunk:#111923; --line:#283543; --fg:#e4ecf2; --muted:#8fa0b0;
+  --accent:#5fa8e8; --accent-ink:#06182b; --copper:#e58a4e;
+  --bad:#ff7a6e; --bad-bg:#3a1714; --warn:#f2b33d; --warn-bg:#36280b; --ok:#5fd18a; --ok-bg:#12301d;
+  --grid:#2b3845; color-scheme:dark}
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font:15px/1.5 var(--f-body);margin:0}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--panel)}
+.wrap{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));max-width:1080px;margin:0 auto}
+header{background:var(--panel);border-bottom:1px solid var(--line);position:sticky;top:env(safe-area-inset-top,0px);z-index:5}
+header .wrap{display:flex;align-items:center;gap:12px;padding-block:13px;flex-wrap:wrap}
+.brand{font:700 20px/1 var(--f-display);letter-spacing:-.01em;display:flex;align-items:center;gap:9px}
+.brand .mark{width:24px;height:24px;border-radius:6px;background:var(--accent);display:grid;place-items:center;color:var(--accent-ink);font:700 12px var(--f-mono)}
+.sub{font:12px var(--f-mono);color:var(--muted);border:1px solid var(--line);padding:3px 8px;border-radius:5px}
+.spacer{flex:1}
+.local{font:12px var(--f-mono);color:var(--ok);display:flex;align-items:center;gap:6px}
+.local i{width:8px;height:8px;border-radius:50%;background:var(--ok)}
+
+main.wrap{padding-block:20px;display:flex;flex-direction:column;gap:16px}
+#landing{display:flex;flex-direction:column;gap:26px}
+.hero{text-align:center;display:flex;flex-direction:column;gap:14px;align-items:center;padding:14px 0 4px}
+.eyebrow{font:600 12px var(--f-mono);letter-spacing:.14em;text-transform:uppercase;color:var(--accent);background:color-mix(in srgb,var(--accent) 10%,transparent);padding:5px 12px;border-radius:999px}
+.htitle{font:700 clamp(26px,5vw,44px)/1.08 var(--f-display);margin:0;letter-spacing:-.02em;text-wrap:balance}
+.hlede{color:var(--muted);font-size:clamp(14px,2vw,16px);max-width:66ch;margin:0;line-height:1.6}
+.drop{border:2px dashed var(--line);border-radius:14px;padding:34px 18px;text-align:center;cursor:pointer;transition:.15s;background:var(--panel);width:100%;max-width:640px}
+.drop:hover,.drop.over{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 8%,var(--panel))}
+.drop .big{font:700 22px/1.2 var(--f-display);margin-bottom:6px}
+.drop .sm{color:var(--muted);font-size:14px;max-width:60ch;margin:0 auto}
+.drop .sm b{color:var(--fg)}
+.herobtns{display:flex;gap:16px;align-items:center;flex-wrap:wrap;justify-content:center}
+.privacy{font:12px var(--f-mono);color:var(--muted)}
+.feat{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px}
+.feat article{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px;display:flex;flex-direction:column;gap:7px}
+.feat .fi{width:34px;height:34px;border-radius:9px;background:var(--sunk);color:var(--accent);display:grid;place-items:center;font:700 17px var(--f-mono)}
+.feat h3{font:600 15px var(--f-display);margin:4px 0 0}
+.feat p{margin:0;font-size:13px;color:var(--muted);line-height:1.55}
+.feat code{font:12px var(--f-mono);background:var(--sunk);padding:1px 5px;border-radius:4px;color:var(--copper)}
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px}
+@media (max-width:620px){.steps{grid-template-columns:1fr}}
+.step{display:flex;gap:12px;align-items:flex-start}
+.step .num{flex:0 0 auto;width:28px;height:28px;border-radius:50%;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;font:700 14px var(--f-display)}
+.step b{font:600 14px var(--f-body);font-family:var(--f-display)}
+.step p{margin:2px 0 0;font-size:12px;color:var(--muted);line-height:1.5}
+.hidden{display:none}
+
+.summary{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:16px;align-items:start}
+@media (max-width:560px){.summary{grid-template-columns:minmax(0,1fr)}.verdict{text-align:left!important}}
+.summary h1{font:700 clamp(18px,3vw,24px)/1.2 var(--f-display);margin:0;word-break:break-all;text-wrap:balance}
+.fmeta{display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:8px;font:12px var(--f-mono);color:var(--muted)}
+.verdict{text-align:right}
+.pill{display:inline-flex;align-items:center;gap:6px;font:600 13px var(--f-body);padding:5px 12px;border-radius:999px;text-transform:uppercase;letter-spacing:.05em}
+.pill.bad{background:var(--bad-bg);color:var(--bad)} .pill.warn{background:var(--warn-bg);color:var(--warn)} .pill.ok{background:var(--ok-bg);color:var(--ok)}
+.score{font:700 38px/1 var(--f-display);margin-top:6px;font-variant-numeric:tabular-nums}
+.score small{font-size:15px;color:var(--muted);font-weight:600}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.btn{font:600 13px var(--f-body);border:1px solid var(--line);border-radius:7px;padding:7px 13px;cursor:pointer;background:var(--panel);color:var(--fg)}
+.btn.pri{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+:focus-visible{outline:2px solid var(--copper);outline-offset:2px}
+
+.panelbox{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);overflow-x:auto;padding:0 6px}
+.tabs button{all:unset;cursor:pointer;padding:12px 14px;font:500 13px var(--f-body);color:var(--muted);border-bottom:2px solid transparent;white-space:nowrap}
+.tabs button[aria-selected="true"]{color:var(--fg);border-color:var(--copper)}
+.tabs button .n{font:11px var(--f-mono);background:var(--sunk);padding:1px 6px;border-radius:999px;margin-left:5px}
+.tab-panel{padding:18px}
+h2{font:600 12px var(--f-body);text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:0 0 12px}
+
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:16px}
+.hashrow{display:flex;flex-direction:column;gap:3px;margin-bottom:10px}
+.hashrow .lbl{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;display:flex;justify-content:space-between}
+.hashrow .val{font:12px var(--f-mono);overflow-wrap:anywhere;background:var(--sunk);padding:7px 9px;border-radius:6px}
+.cpy{all:unset;cursor:pointer;font:11px var(--f-mono);color:var(--accent)}
+.cpy:hover{text-decoration:underline}
+dl{margin:0;display:grid;grid-template-columns:auto minmax(0,1fr);gap:7px 12px}
+dt{font-size:12px;color:var(--muted)} dd{margin:0;font:12px var(--f-mono);overflow-wrap:anywhere;text-align:right}
+
+.entro{display:flex;align-items:baseline;gap:8px;margin-bottom:8px}
+.entro .big{font:700 30px var(--f-display);font-variant-numeric:tabular-nums}
+.entro .u{font:12px var(--f-mono);color:var(--muted)}
+.ebar{height:10px;background:var(--sunk);border-radius:5px;overflow:hidden}
+.ebar i{display:block;height:100%;transition:width .4s}
+.ticks{display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-top:4px;font-family:var(--f-mono)}
+.note{font-size:12px;color:var(--muted);margin-top:8px}
+.secentro{margin-top:14px}
+.secrow{display:grid;grid-template-columns:90px 1fr 48px;gap:8px;align-items:center;font:12px var(--f-mono);margin-bottom:4px}
+.secrow .mini{height:7px;background:var(--sunk);border-radius:4px;overflow:hidden}
+.secrow .mini i{display:block;height:100%}
+
+.obs{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.obs li{display:flex;gap:10px;align-items:flex-start;font-size:13px}
+.obs .ic{flex:0 0 auto;width:20px;height:20px;border-radius:5px;display:grid;place-items:center;font:700 12px var(--f-mono)}
+.ic.bad{background:var(--bad-bg);color:var(--bad)} .ic.warn{background:var(--warn-bg);color:var(--warn)} .ic.ok{background:var(--ok-bg);color:var(--ok)} .ic.info{background:var(--sunk);color:var(--muted)}
+
+.scroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th{font:600 11px var(--f-body);text-transform:uppercase;letter-spacing:.06em;color:var(--muted);text-align:left;padding:8px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:8px;border-bottom:1px solid var(--line);vertical-align:top}
+td.mono,.mono{font-family:var(--f-mono);font-size:12px;overflow-wrap:anywhere}
+tbody tr:hover{background:var(--sunk)}
+.chip{font:600 11px var(--f-mono);padding:2px 6px;border-radius:4px;white-space:nowrap}
+.chip.bad{background:var(--bad-bg);color:var(--bad)} .chip.warn{background:var(--warn-bg);color:var(--warn)} .chip.ok{background:var(--ok-bg);color:var(--ok)} .chip.info{background:var(--sunk);color:var(--muted)}
+
+.sbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+.sbar input{font:13px var(--f-mono);padding:7px 10px;border:1px solid var(--line);border-radius:6px;background:var(--sunk);color:var(--fg);flex:1;min-width:140px}
+.sbar .n{font:11px var(--f-mono);color:var(--muted)}
+.slist{max-height:300px;overflow:auto;background:var(--sunk);border-radius:8px;padding:10px;font:12px/1.7 var(--f-mono);display:flex;flex-direction:column;gap:1px}
+.slist .s{overflow-wrap:anywhere}
+.slist .s mark{background:color-mix(in srgb,var(--copper) 35%,transparent);color:inherit;border-radius:2px}
+.slist .tag{color:var(--copper);font-weight:600}
+.empty{color:var(--muted);text-align:center;padding:28px;font-size:13px}
+
+.ioc-head{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+.attack{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px}
+.tac{background:var(--sunk);border:1px solid var(--line);border-radius:8px;padding:12px}
+.tac h3{font:600 11px var(--f-body);text-transform:uppercase;letter-spacing:.06em;margin:0 0 8px;color:var(--muted)}
+.tech{display:block;font-size:13px;padding:6px 9px;border-radius:5px;background:var(--panel);border-left:3px solid var(--copper);margin-top:6px}
+.tech code{font:11px var(--f-mono);color:var(--muted);display:block;margin-top:2px}
+
+.hist{display:flex;flex-direction:column;gap:2px}
+.hist button{all:unset;box-sizing:border-box;width:100%;display:grid;grid-template-columns:6px 1fr auto;gap:10px;align-items:center;padding:9px;border-radius:7px;cursor:pointer}
+.hist button:hover,.hist button[aria-current="true"]{background:var(--sunk)}
+.hist .sev{width:6px;height:30px;border-radius:3px}
+.sev.bad{background:var(--bad)} .sev.warn{background:var(--warn)} .sev.ok{background:var(--ok)}
+.hist .nm{font:13px var(--f-mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hist .sc{font:600 13px var(--f-mono);font-variant-numeric:tabular-nums}
+
+footer{color:var(--muted);font-size:12px;padding-block:22px;text-align:center}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--fg);color:var(--bg);font:600 13px var(--f-body);padding:9px 16px;border-radius:999px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:20}
+.toast.show{opacity:1}
+.spin{display:inline-block;width:14px;height:14px;border:2px solid var(--muted);border-top-color:transparent;border-radius:50%;animation:sp .7s linear infinite;vertical-align:-2px;margin-right:6px}
+@keyframes sp{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+
+<header><div class="wrap">
+  <div class="brand"><span class="mark">0x</span>Static File Inspector</div>
+  <span class="sub">deep static analysis · no execution</span>
+  <div class="spacer"></div>
+  <div class="local"><i></i>runs locally — nothing uploaded</div>
+</div></header>
+
+<main class="wrap">
+  <section id="landing">
+    <div class="hero">
+      <div class="eyebrow">Defensive · static-only · offline</div>
+      <h1 class="htitle">Understand a suspicious file<br>before you ever run it.</h1>
+      <p class="hlede">Drop any file and get an analyst-grade report in a second — hashes, true file type, PE and ZIP internals, entropy, strings, extracted IOCs and MITRE ATT&CK leads. The bytes are read, never executed, and nothing leaves your browser.</p>
+      <label class="drop" id="drop" for="file">
+        <div class="big">Drop a file here</div>
+        <div class="sm">or <b>click to choose</b> — EXE, DLL, PDF, ZIP, scripts, anything</div>
+        <input type="file" id="file" class="hidden">
+      </label>
+      <div class="herobtns">
+        <button class="btn pri" id="loadsample">Load a sample file →</button>
+        <span class="privacy">🔒 100% local · no upload · no execution</span>
+      </div>
+    </div>
+
+    <div class="feat">
+      <article><div class="fi">#</div><h3>Hashes &amp; identity</h3><p>SHA-1/256/512 for IOC lookups, plus the real type from magic bytes — catches a <code>.exe</code> wearing a <code>.pdf</code> name.</p></article>
+      <article><div class="fi">⌗</div><h3>PE internals</h3><p>Architecture, compile time, imported DLLs and <b>per-section entropy</b> that exposes packed code.</p></article>
+      <article><div class="fi">⊟</div><h3>Archive X-ray</h3><p>Lists every file inside a ZIP/JAR/APK/Office doc and flags executables or scripts hidden within.</p></article>
+      <article><div class="fi">⚑</div><h3>IOC extraction</h3><p>URLs, domains, IPs, emails and wallets pulled out, de-duplicated and exportable as JSON.</p></article>
+      <article><div class="fi">◈</div><h3>PDF objects</h3><p>Counts active-content objects — <code>/JavaScript</code>, <code>/OpenAction</code>, <code>/Launch</code> — that let a document run code.</p></article>
+      <article><div class="fi">▣</div><h3>ATT&amp;CK mapping</h3><p>Maps API names and command strings to MITRE techniques, giving you leads to verify fast.</p></article>
+    </div>
+
+    <div class="steps">
+      <div class="step"><span class="num">1</span><div><b>Read</b><p>The whole file is loaded as bytes in your browser.</p></div></div>
+      <div class="step"><span class="num">2</span><div><b>Parse &amp; measure</b><p>Signatures, PE/ZIP/PDF structure, entropy and strings.</p></div></div>
+      <div class="step"><span class="num">3</span><div><b>Score &amp; map</b><p>Indicators become a 0–100 score, IOCs and ATT&amp;CK leads.</p></div></div>
+    </div>
+  </section>
+
+  <div id="report" class="hidden">
+    <div class="summary">
+      <div>
+        <h1 id="fname"></h1>
+        <div class="fmeta" id="fmeta"></div>
+        <div class="actions">
+          <button class="btn pri" id="copyreport">Copy report</button>
+          <button class="btn" id="copyioc">Copy IOCs (JSON)</button>
+          <button class="btn" id="another">Inspect another</button>
+        </div>
+      </div>
+      <div class="verdict">
+        <span class="pill" id="pill"></span>
+        <div class="score" id="score"></div>
+      </div>
+    </div>
+
+    <div class="panelbox" style="margin-top:16px">
+      <div class="tabs" role="tablist" id="tabs"></div>
+      <div class="tab-panel" id="panel"></div>
+    </div>
+  </div>
+</main>
+<footer class="wrap">Static File Inspector · built by Jayveer Vasava · inspects files without executing them</footer>
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+const $=s=>document.querySelector(s);
+const U8=b=>new Uint8Array(b);
+const hex=b=>b.toString(16).padStart(2,"0");
+const toast=m=>{const t=$("#toast");t.textContent=m;t.classList.add("show");setTimeout(()=>t.classList.remove("show"),1400);};
+function copyText(v,msg){(navigator.clipboard?.writeText(v)||Promise.reject()).then(()=>toast(msg||"Copied")).catch(()=>toast("Copy not available"));}
+function fmtSize(n){if(n<1024)return n+" B";if(n<1048576)return (n/1024).toFixed(1)+" KB";return (n/1048576).toFixed(2)+" MB";}
+function esc(s){return String(s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));}
+
+/* ---------------- signatures ---------------- */
+const SIGS=[
+ {t:"Windows PE executable (EXE/DLL)",ext:".exe/.dll",risk:2,hx:[0x4D,0x5A]},
+ {t:"ELF executable (Linux)",ext:"ELF",risk:2,hx:[0x7F,0x45,0x4C,0x46]},
+ {t:"Mach-O executable",ext:"Mach-O",risk:2,hx:[0xFE,0xED,0xFA,0xCE]},
+ {t:"Java class",ext:".class",risk:1,hx:[0xCA,0xFE,0xBA,0xBE]},
+ {t:"MSI / OLE compound (doc/xls/msi)",ext:".msi",risk:2,hx:[0xD0,0xCF,0x11,0xE0]},
+ {t:"ZIP archive (zip/jar/apk/docx/xlsx)",ext:".zip",risk:1,hx:[0x50,0x4B,0x03,0x04]},
+ {t:"RAR archive",ext:".rar",risk:1,hx:[0x52,0x61,0x72,0x21]},
+ {t:"7-Zip archive",ext:".7z",risk:1,hx:[0x37,0x7A,0xBC,0xAF]},
+ {t:"GZIP archive",ext:".gz",risk:1,hx:[0x1F,0x8B]},
+ {t:"PDF document",ext:".pdf",risk:1,hx:[0x25,0x50,0x44,0x46]},
+ {t:"RTF document",ext:".rtf",risk:1,hx:[0x7B,0x5C,0x72,0x74,0x66]},
+ {t:"Windows shortcut (LNK)",ext:".lnk",risk:2,hx:[0x4C,0x00,0x00,0x00]},
+ {t:"PNG image",ext:".png",risk:0,hx:[0x89,0x50,0x4E,0x47]},
+ {t:"JPEG image",ext:".jpg",risk:0,hx:[0xFF,0xD8,0xFF]},
+ {t:"GIF image",ext:".gif",risk:0,hx:[0x47,0x49,0x46,0x38]},
+];
+function detectType(b){
+ for(const s of SIGS) if(s.hx.every((x,i)=>b[i]===x)) return s;
+ const n=Math.min(b.length,512);let p=0;
+ for(let i=0;i<n;i++){const v=b[i];if(v===9||v===10||v===13||(v>=32&&v<127))p++;}
+ if(n&&p/n>0.9) return {t:"Text / script (ASCII)",ext:".txt",risk:1,hx:[]};
+ return {t:"Unknown / raw binary",ext:"—",risk:1,hx:[]};
+}
+function entropy(b,start,end){
+ start=start||0;end=end===undefined?b.length:end;
+ const len=end-start;if(len<=0)return 0;
+ const f=new Uint32Array(256);
+ for(let i=start;i<end;i++)f[b[i]]++;
+ let e=0;for(let i=0;i<256;i++){if(f[i]){const p=f[i]/len;e-=p*Math.log2(p);}}
+ return e;
+}
+function extractStrings(b,min,cap){
+ min=min||4;cap=cap||8000;const out=[];let cur="";
+ for(let i=0;i<b.length;i++){const v=b[i];
+  if(v>=32&&v<127){cur+=String.fromCharCode(v);}
+  else{if(cur.length>=min){out.push(cur);if(out.length>=cap)return out;}cur="";}}
+ if(cur.length>=min&&out.length<cap)out.push(cur);
+ return out;
+}
+
+/* ---------------- IOC + ATT&CK patterns ---------------- */
+const PATTERNS=[
+ {re:/https?:\/\/[^\s"'<>]{4,}/ig,tag:"URL",risk:1,ioc:"url"},
+ {re:/\b(?:\d{1,3}\.){3}\d{1,3}\b/g,tag:"IP",risk:1,ioc:"ip"},
+ {re:/\b[a-z0-9-]{2,}\.(?:ru|cn|tk|top|xyz|gq|cf|ml|su|pw|info|click)\b/ig,tag:"suspicious domain",risk:2,ioc:"domain"},
+ {re:/\b(?:CreateProcess|VirtualAlloc|WriteProcessMemory|LoadLibrary|GetProcAddress|RegSetValue|ShellExecute|WinExec|URLDownloadToFile|CreateRemoteThread|SetWindowsHookEx|InternetOpen|WSASocket|CryptEncrypt|FindFirstFile)\w*/g,tag:"Windows API",risk:2},
+ {re:/(?:powershell|cmd\.exe|-enc\b|-nop\b|bypass|Invoke-Expression|IEX|DownloadString|FromBase64String|Add-MpPreference|schtasks|reg add)/ig,tag:"script/command",risk:2},
+ {re:/\b[A-Fa-f0-9]{32}\b/g,tag:"MD5-like hash",risk:0,ioc:"hash"},
+ {re:/[A-Za-z0-9+/]{60,}={0,2}/g,tag:"base64 blob",risk:1},
+ {re:/(?:[A-Za-z]:\\\\|C:\\Windows|C:\\Users|AppData|\\Temp\\|System32)/ig,tag:"filesystem path",risk:1},
+ {re:/(?:HKEY_|HKLM|HKCU|CurrentVersion\\Run|Software\\Microsoft)/g,tag:"registry key",risk:2},
+ {re:/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/ig,tag:"email",risk:0,ioc:"email"},
+ {re:/(?:bitcoin|wallet|0x[a-f0-9]{40}|\b[13][a-km-zA-HJ-NP-Z1-9]{25,34}\b)/g,tag:"crypto wallet",risk:2,ioc:"wallet"},
+];
+const ATTACK=[
+ {kw:/VirtualAlloc|WriteProcessMemory|CreateRemoteThread/,tac:"Defense Evasion",id:"T1055",name:"Process Injection"},
+ {kw:/URLDownloadToFile|DownloadString|InternetOpen|WinHttp/,tac:"Command & Control",id:"T1105",name:"Ingress Tool Transfer"},
+ {kw:/powershell|-enc|IEX|Invoke-Expression/,tac:"Execution",id:"T1059.001",name:"PowerShell"},
+ {kw:/cmd\.exe|WinExec|ShellExecute/,tac:"Execution",id:"T1059.003",name:"Windows Command Shell"},
+ {kw:/CurrentVersion\\Run|reg add|RegSetValue/,tac:"Persistence",id:"T1547.001",name:"Registry Run Keys"},
+ {kw:/schtasks/,tac:"Persistence",id:"T1053.005",name:"Scheduled Task"},
+ {kw:/CryptEncrypt|\.locked|ransom/i,tac:"Impact",id:"T1486",name:"Data Encrypted for Impact"},
+ {kw:/SetWindowsHookEx|GetAsyncKeyState/,tac:"Collection",id:"T1056.001",name:"Keylogging"},
+ {kw:/Add-MpPreference|bypass|amsi/i,tac:"Defense Evasion",id:"T1562.001",name:"Disable/Modify Tools"},
+ {kw:/base64|FromBase64String/i,tac:"Defense Evasion",id:"T1027",name:"Obfuscated Files or Info"},
+];
+
+/* ---------------- PE parsing ---------------- */
+function parsePE(b){
+ try{
+  if(b[0]!==0x4D||b[1]!==0x5A)return null;
+  const dv=new DataView(b.buffer,b.byteOffset,b.byteLength);
+  const peOff=dv.getUint32(0x3C,true);
+  if(peOff+24>b.length||dv.getUint32(peOff,true)!==0x00004550)return null; // "PE\0\0"
+  const machine=dv.getUint16(peOff+4,true);
+  const nSec=dv.getUint16(peOff+6,true);
+  const tstamp=dv.getUint32(peOff+8,true);
+  const optSize=dv.getUint16(peOff+20,true);
+  const chars=dv.getUint16(peOff+22,true);
+  const magic=optSize?dv.getUint16(peOff+24,true):0;
+  const secStart=peOff+24+optSize;
+  const machines={0x14c:"x86 (32-bit)",0x8664:"x64 (64-bit)",0x1c0:"ARM",0xaa64:"ARM64"};
+  const secs=[];
+  for(let i=0;i<nSec&&i<32;i++){
+   const o=secStart+i*40;if(o+40>b.length)break;
+   let name="";for(let j=0;j<8;j++){const c=b[o+j];if(c)name+=String.fromCharCode(c);}
+   const vsize=dv.getUint32(o+8,true),rawSize=dv.getUint32(o+16,true),rawPtr=dv.getUint32(o+20,true);
+   let ent=0;
+   if(rawPtr&&rawSize&&rawPtr+Math.min(rawSize,b.length-rawPtr)<=b.length)
+     ent=entropy(b,rawPtr,rawPtr+Math.min(rawSize,b.length-rawPtr));
+   secs.push({name:name||"(unnamed)",vsize,rawSize,ent});
+  }
+  // crude import-name scan: DLL names + common APIs already captured in strings
+  const dlls=[...new Set((extractStrings(b,5,20000).filter(s=>/\.dll$/i.test(s)&&s.length<40)))].slice(0,40);
+  return {
+   arch:machines[machine]||("0x"+machine.toString(16)),
+   type:(chars&0x2000)?"DLL":"EXE",
+   compiled:tstamp?new Date(tstamp*1000).toISOString().replace("T"," ").slice(0,19)+" UTC":"—",
+   bits:magic===0x20b?"PE32+ (64-bit)":magic===0x10b?"PE32 (32-bit)":"—",
+   sections:secs,dlls
+  };
+ }catch(e){return null;}
+}
+
+/* ---------------- ZIP central-directory parsing (no decompression) ---------------- */
+function parseZip(b){
+ try{
+  // find End of Central Directory (signature 0x06054b50), scan last 64KB
+  const dv=new DataView(b.buffer,b.byteOffset,b.byteLength);
+  let eocd=-1;const min=Math.max(0,b.length-65557);
+  for(let i=b.length-22;i>=min;i--){if(dv.getUint32(i,true)===0x06054b50){eocd=i;break;}}
+  if(eocd<0)return null;
+  const total=dv.getUint16(eocd+10,true);
+  let off=dv.getUint32(eocd+16,true);
+  const entries=[];
+  for(let k=0;k<total&&off+46<=b.length;k++){
+   if(dv.getUint32(off,true)!==0x02014b50)break; // central dir header
+   const method=dv.getUint16(off+10,true);
+   const csize=dv.getUint32(off+20,true);
+   const usize=dv.getUint32(off+24,true);
+   const nlen=dv.getUint16(off+28,true);
+   const elen=dv.getUint16(off+30,true);
+   const clen=dv.getUint16(off+32,true);
+   let name="";for(let j=0;j<nlen;j++)name+=String.fromCharCode(b[off+46+j]);
+   entries.push({name,usize,csize,method:method===0?"stored":method===8?"deflate":"m"+method});
+   off+=46+nlen+elen+clen;
+  }
+  return entries;
+ }catch(e){return null;}
+}
+const RISKY_IN_ZIP=/\.(exe|dll|scr|bat|cmd|js|jse|vbs|vbe|wsf|ps1|jar|lnk|hta|msi|com|pif|reg)$/i;
+
+/* ---------------- PDF object scan ---------------- */
+function scanPDF(b){
+ const txt=new TextDecoder("latin1").decode(b.subarray(0,Math.min(b.length,3_000_000)));
+ const checks=[
+  ["/JavaScript","JavaScript",2],["/JS","JS block",2],["/OpenAction","auto-run on open",2],
+  ["/AA","additional actions",2],["/Launch","launches program",2],["/EmbeddedFile","embedded file",1],
+  ["/RichMedia","embedded media/flash",1],["/URI","external link",1],["/SubmitForm","submits data",1],
+ ];
+ const found=[];
+ for(const [token,label,risk] of checks){
+  const c=txt.split(token).length-1;
+  if(c>0)found.push({token,label,count:c,risk});
+ }
+ return found;
+}
+
+/* ---------------- analysis ---------------- */
+async function hash(a,buf){const d=await crypto.subtle.digest(a,buf);return [...U8(d)].map(hex).join("");}
+
+async function analyze(file){
+ const buf=await file.arrayBuffer();const b=U8(buf);
+ const type=detectType(b);
+ const ent=entropy(b);
+ const strs=extractStrings(b);
+ const [sha1,sha256,sha512]=await Promise.all([hash("SHA-1",buf),hash("SHA-256",buf),hash("SHA-512",buf)]);
+
+ // tag strings + collect IOCs
+ const joined="\n"+strs.join("\n")+"\n";
+ const iocs={url:new Set(),ip:new Set(),domain:new Set(),email:new Set(),hash:new Set(),wallet:new Set()};
+ const tagCount={};
+ for(const p of PATTERNS){
+  const m=joined.match(p.re);
+  if(m&&m.length){tagCount[p.tag]=(tagCount[p.tag]||0)+m.length;
+   if(p.ioc)m.forEach(x=>iocs[p.ioc]&&iocs[p.ioc].add(x.trim()));}
+ }
+ // tagged-strings list for display
+ const tagged=strs.map(s=>{for(const p of PATTERNS){p.re.lastIndex=0;if(p.re.test(s))return {s,tag:p.tag};}return {s,tag:null};});
+
+ // ATT&CK from whole string blob
+ const attack=[];
+ for(const a of ATTACK){if(a.kw.test(joined)){ (attack.find(x=>x.tac===a.tac)||attack[attack.push({tac:a.tac,techs:[]})-1]).techs.push(a);}}
+
+ // structured parsers
+ const pe=parsePE(b);
+ const zip=(type.ext.includes(".zip"))?parseZip(b):null;
+ const pdf=(type.ext===".pdf")?scanPDF(b):null;
+
+ // extension mismatch
+ const dotExt=(file.name.match(/\.[a-z0-9]+$/i)||[""])[0].toLowerCase();
+ const mismatch=dotExt&&type.ext.startsWith(".")&&type.ext!=="—"&&!type.ext.toLowerCase().includes(dotExt);
+
+ // scoring + observations
+ let score=0;const obs=[];
+ if(type.risk>=2){obs.push(["warn","Executable or active-content type — handle with care."]);score+=28;}
+ if(ent>7.2){obs.push(["warn",`High overall entropy (${ent.toFixed(2)}) — likely packed or encrypted.`]);score+=22;}
+ if(mismatch){obs.push(["bad",`Extension ${dotExt} ≠ detected type (${type.t}) — possible disguise.`]);score+=35;}
+ if(pe){const packed=pe.sections.filter(s=>s.ent>7.2);if(packed.length){obs.push(["warn",`${packed.length} PE section(s) with high entropy (${packed.map(s=>s.name).join(", ")}) — packing indicator.`]);score+=15;}}
+ if(zip){const risky=zip.filter(e=>RISKY_IN_ZIP.test(e.name));if(risky.length){obs.push(["bad",`Archive contains ${risky.length} executable/script file(s): ${risky.slice(0,4).map(e=>e.name).join(", ")}${risky.length>4?"…":""}`]);score+=30;}}
+ if(pdf){const act=pdf.filter(p=>p.risk>=2);if(act.length){obs.push(["bad",`PDF has active content: ${act.map(p=>p.label).join(", ")}.`]);score+=30;}}
+ for(const [tag,n] of Object.entries(tagCount)){
+  const risk=PATTERNS.find(p=>p.tag===tag).risk;
+  score+=(risk>=2?4:risk===1?1:0)*Math.min(n,8);
+  if(risk>=1)obs.push([risk>=2?"warn":"info",`${n} ${tag} indicator(s).`]);
+ }
+ if(attack.length){const tot=attack.reduce((a,x)=>a+x.techs.length,0);obs.push(["warn",`${tot} MITRE ATT&CK technique(s) suggested from behaviour strings.`]);}
+ if(!obs.length)obs.push(["ok","No notable static indicators in this file."]);
+ score=Math.min(100,score);
+
+ return {name:file.name,size:b.length,type,ent,sha1,sha256,sha512,
+   head:[...b.slice(0,16)].map(hex).join(" ").toUpperCase(),
+   headAscii:[...b.slice(0,16)].map(v=>(v>=32&&v<127)?String.fromCharCode(v):".").join(""),
+   dotExt,mismatch,strs,tagged,iocs,pe,zip,pdf,attack,obs,score,strCount:strs.length};
+}
+
+/* ---------------- rendering ---------------- */
+let R=null,activeTab="overview",history=[];
+
+function tabsFor(r){
+ const t=[["overview","Overview"],["hashes","Hashes"],["strings","Strings"]];
+ t.push(["iocs","IOCs"]);
+ if(r.pe)t.push(["pe","PE structure"]);
+ if(r.zip)t.push(["zip","Archive"]);
+ if(r.pdf)t.push(["pdf","PDF objects"]);
+ if(r.attack.length)t.push(["attack","ATT&CK"]);
+ if(history.length>1)t.push(["history","History"]);
+ return t;
+}
+function iocCount(r){return Object.values(r.iocs).reduce((a,s)=>a+s.size,0);}
+
+function render(r){
+ R=r;
+ $("#fname").textContent=r.name;
+ $("#fmeta").innerHTML=[`<span>${fmtSize(r.size)} · ${r.size.toLocaleString()} bytes</span>`,
+   `<span>${esc(r.type.t)}</span>`,`<span>${r.strCount.toLocaleString()} strings</span>`,
+   `<span>${iocCount(r)} IOCs</span>`].join("");
+ let lvl,txt;if(r.score>=55){lvl="bad";txt="High indicators";}else if(r.score>=25){lvl="warn";txt="Review advised";}else{lvl="ok";txt="Low indicators";}
+ const pill=$("#pill");pill.className="pill "+lvl;pill.textContent=txt;
+ $("#score").innerHTML=r.score+'<small>/100</small>';
+ if(!tabsFor(r).some(t=>t[0]===activeTab))activeTab="overview";
+ renderTabs();renderPanel();
+ $("#report").classList.remove("hidden");$("#landing").classList.add("hidden");
+ $("#report").scrollIntoView({behavior:"smooth",block:"start"});
+}
+function renderTabs(){
+ const tabs=tabsFor(R);
+ $("#tabs").innerHTML=tabs.map(([id,lbl])=>{
+  let n="";if(id==="strings")n=R.strCount;if(id==="iocs")n=iocCount(R);
+  if(id==="pe"&&R.pe)n=R.pe.sections.length;if(id==="zip"&&R.zip)n=R.zip.length;
+  if(id==="pdf"&&R.pdf)n=R.pdf.length;if(id==="attack")n=R.attack.reduce((a,x)=>a+x.techs.length,0);
+  if(id==="history")n=history.length;
+  return `<button role="tab" data-tab="${id}" aria-selected="${id===activeTab}">${lbl}${n!==""?`<span class="n">${n}</span>`:""}</button>`;
+ }).join("");
+ document.querySelectorAll('#tabs [data-tab]').forEach(btn=>btn.onclick=()=>{activeTab=btn.dataset.tab;renderTabs();renderPanel();});
+}
+function bar(ent){const c=ent>7.2?"var(--bad)":ent>6?"var(--warn)":"var(--ok)";return {w:(ent/8*100).toFixed(0),c};}
+
+function renderPanel(){
+ const p=$("#panel");const r=R;
+ if(activeTab==="overview"){
+  const e=bar(r.ent);
+  p.innerHTML=`<div class="cols">
+   <div><h2>File identity</h2><dl>
+    <dt>Detected type</dt><dd>${esc(r.type.t)}</dd>
+    <dt>Typical ext</dt><dd>${esc(r.type.ext)}</dd>
+    <dt>Name ext</dt><dd>${esc(r.dotExt||"—")}</dd>
+    <dt>Header hex</dt><dd>${r.head}</dd>
+    <dt>Header ascii</dt><dd>${esc(r.headAscii)}</dd></dl></div>
+   <div><h2>Overall entropy</h2>
+    <div class="entro"><span class="big">${r.ent.toFixed(2)}</span><span class="u">bits/byte</span></div>
+    <div class="ebar"><i style="width:${e.w}%;background:${e.c}"></i></div>
+    <div class="ticks"><span>0 plain</span><span>text 4–5</span><span>7+ packed</span><span>8</span></div>
+    <div class="note">${r.ent>7.2?"Near the 8.0 maximum — packed/encrypted content sits here.":r.ent>4?"Normal range for mixed text and binary.":"Low — plain or repetitive content."}</div></div>
+   <div style="grid-column:1/-1"><h2>Observations</h2><ul class="obs">${
+    r.obs.map(([k,t])=>{const m=k==="bad"||k==="warn"?"!":k==="ok"?"✓":"i";return `<li><span class="ic ${k}">${m}</span><span>${esc(t)}</span></li>`;}).join("")
+   }</ul></div></div>`;
+ }
+ else if(activeTab==="hashes"){
+  const hs=[["SHA-1",r.sha1],["SHA-256",r.sha256],["SHA-512",r.sha512]];
+  p.innerHTML=`<h2>Cryptographic hashes</h2>`+hs.map(([l,v],i)=>`
+   <div class="hashrow"><div class="lbl">${l}<button class="cpy" data-h="${i}">copy</button></div><div class="val" id="h${i}">${v}</div></div>`).join("")
+   +`<div class="note">Look these up in VirusTotal, MalwareBazaar or your own IOC feed to check if the sample is already known.</div>`;
+  document.querySelectorAll(".cpy[data-h]").forEach(btn=>btn.onclick=()=>copyText(hs[+btn.dataset.h][1],"Hash copied"));
+ }
+ else if(activeTab==="strings"){
+  p.innerHTML=`<div class="sbar"><input type="text" id="sfilter" placeholder="filter strings… (http, .exe, CreateProcess)"><span class="n" id="scount"></span></div><div class="slist" id="slist"></div>`;
+  $("#sfilter").oninput=e=>renderStrings(e.target.value);renderStrings("");
+ }
+ else if(activeTab==="iocs"){
+  const groups=[["url","URLs"],["domain","Domains"],["ip","IP addresses"],["email","Emails"],["hash","Hashes in file"],["wallet","Crypto wallets"]];
+  const any=iocCount(r);
+  p.innerHTML=`<div class="ioc-head"><h2 style="margin:0">Extracted indicators of compromise</h2><button class="btn" id="iocjson">Copy all (JSON)</button></div>`+
+   (any?groups.filter(([k])=>r.iocs[k].size).map(([k,lbl])=>`
+    <h2 style="margin-top:16px">${lbl} <span class="chip info">${r.iocs[k].size}</span></h2>
+    <div class="slist">${[...r.iocs[k]].slice(0,300).map(v=>`<div class="s">${esc(v)}</div>`).join("")}</div>`).join("")
+    :`<div class="empty">No network or crypto IOCs found in this file.</div>`);
+  const ij=$("#iocjson");if(ij)ij.onclick=()=>copyText(iocJSON(r),"IOCs copied");
+ }
+ else if(activeTab==="pe"){
+  const pe=r.pe;
+  p.innerHTML=`<div class="cols"><div><h2>Headers</h2><dl>
+    <dt>Type</dt><dd>${pe.type}</dd><dt>Architecture</dt><dd>${esc(pe.arch)}</dd>
+    <dt>Format</dt><dd>${pe.bits}</dd><dt>Compiled</dt><dd>${pe.compiled}</dd>
+    <dt>Sections</dt><dd>${pe.sections.length}</dd></dl>
+    <div class="note">Compile time is attacker-controllable, but an obviously fake or future date is itself a signal.</div></div>
+   <div><h2>Imported DLLs <span class="chip info">${pe.dlls.length}</span></h2>
+    <div class="slist" style="max-height:200px">${pe.dlls.length?pe.dlls.map(d=>`<div class="s">${esc(d)}</div>`).join(""):'<div class="empty">none detected</div>'}</div></div></div>
+   <div class="secentro"><h2>Section entropy</h2>${pe.sections.map(s=>{const e=bar(s.ent);return `
+    <div class="secrow"><span>${esc(s.name)}</span><span class="mini"><i style="width:${e.w}%;background:${e.c}"></i></span><span>${s.ent.toFixed(2)}</span></div>`;}).join("")}
+    <div class="note">A code section (.text) with entropy above ~7 usually means the real code is packed and only unpacks at runtime.</div></div>`;
+ }
+ else if(activeTab==="zip"){
+  const risky=r.zip.filter(e=>RISKY_IN_ZIP.test(e.name)).length;
+  p.innerHTML=`<h2>Archive contents <span class="chip ${risky?'bad':'info'}">${r.zip.length} files${risky?` · ${risky} risky`:""}</span></h2>
+   <div class="scroll"><table><thead><tr><th>Name</th><th>Type</th><th>Size</th><th>Packed</th><th>Method</th></tr></thead><tbody>${
+    r.zip.slice(0,500).map(e=>{const rk=RISKY_IN_ZIP.test(e.name);return `<tr>
+     <td class="mono">${esc(e.name)}${rk?' <span class="chip bad">exec/script</span>':''}</td>
+     <td class="mono">${esc((e.name.match(/\.[a-z0-9]+$/i)||['—'])[0])}</td>
+     <td class="mono">${fmtSize(e.usize)}</td><td class="mono">${fmtSize(e.csize)}</td><td class="mono">${e.method}</td></tr>`;}).join("")
+   }</tbody></table></div>
+   <div class="note">Listed from the ZIP central directory without decompressing. Executable or script files inside a document-looking archive are a common delivery trick.</div>`;
+ }
+ else if(activeTab==="pdf"){
+  p.innerHTML=`<h2>PDF active-content objects</h2>${r.pdf.length?`<div class="scroll"><table><thead><tr><th>Object</th><th>Meaning</th><th>Count</th><th>Risk</th></tr></thead><tbody>${
+    r.pdf.map(o=>`<tr><td class="mono">${esc(o.token)}</td><td>${esc(o.label)}</td><td class="mono">${o.count}</td>
+     <td><span class="chip ${o.risk>=2?'bad':'warn'}">${o.risk>=2?'high':'low'}</span></td></tr>`).join("")
+   }</tbody></table></div>`:'<div class="empty">No active-content objects found — looks like a static document.</div>'}
+   <div class="note">JavaScript, OpenAction and Launch let a PDF run code or programs when opened. A clean document needs none of these.</div>`;
+ }
+ else if(activeTab==="attack"){
+  p.innerHTML=`<h2>Suggested MITRE ATT&CK techniques</h2><div class="attack">${
+   r.attack.map(g=>`<div class="tac"><h3>${esc(g.tac)}</h3>${g.techs.map(t=>`<span class="tech">${esc(t.name)}<code>${t.id}</code></span>`).join("")}</div>`).join("")
+  }</div><div class="note">Mapped from API names and command strings found in the file. These are leads to verify, not proof of behaviour — static strings can be present without being used.</div>`;
+ }
+ else if(activeTab==="history"){
+  p.innerHTML=`<h2>This session</h2><div class="hist">${history.map((h,i)=>{
+   const lvl=h.score>=55?"bad":h.score>=25?"warn":"ok";
+   return `<button data-hi="${i}" aria-current="${h===R}"><span class="sev ${lvl}"></span><span class="nm">${esc(h.name)}</span><span class="sc">${h.score}</span></button>`;
+  }).join("")}</div>`;
+  document.querySelectorAll("[data-hi]").forEach(btn=>btn.onclick=()=>{activeTab="overview";render(history[+btn.dataset.hi]);});
+ }
+}
+function renderStrings(filter){
+ const list=$("#slist"),f=(filter||"").trim().toLowerCase();
+ let items=R.tagged;if(f)items=items.filter(x=>x.s.toLowerCase().includes(f));
+ items=[...items].sort((a,b)=>(b.tag?1:0)-(a.tag?1:0));
+ const show=items.slice(0,600);
+ $("#scount").textContent=items.length+" match"+(items.length===1?"":"es")+(items.length>600?" (showing 600)":"");
+ if(!show.length){list.innerHTML='<div class="empty">No strings match.</div>';return;}
+ list.innerHTML=show.map(x=>{let t=esc(x.s);
+  if(f){const re=new RegExp("("+f.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")+")","ig");t=t.replace(re,"<mark>$1</mark>");}
+  return `<div class="s">${t}${x.tag?` <span class="tag">[${x.tag}]</span>`:""}</div>`;}).join("");
+}
+function iocJSON(r){
+ const o={file:r.name,sha256:r.sha256};
+ for(const k of Object.keys(r.iocs))if(r.iocs[k].size)o[k]=[...r.iocs[k]];
+ return JSON.stringify(o,null,2);
+}
+function textReport(r){
+ const hs=[["SHA-1",r.sha1],["SHA-256",r.sha256],["SHA-512",r.sha512]];
+ return ["STATIC FILE INSPECTION REPORT","",
+  "File        : "+r.name,"Size        : "+fmtSize(r.size)+" ("+r.size+" bytes)",
+  "Detected    : "+r.type.t,"Entropy     : "+r.ent.toFixed(3)+" bits/byte",
+  "Static score: "+r.score+"/100","",
+  ...hs.map(([l,v])=>l.padEnd(10)+": "+v),"",
+  r.pe?"PE: "+r.pe.type+" "+r.pe.arch+", "+r.pe.sections.length+" sections, compiled "+r.pe.compiled:"",
+  r.zip?"ZIP: "+r.zip.length+" entries":"",
+  r.pdf&&r.pdf.length?"PDF active objects: "+r.pdf.map(o=>o.token).join(", "):"",
+  "","Observations:",...r.obs.map(([,t])=>" - "+t),
+  iocCount(r)?"\nIOCs:\n"+iocJSON(r):""].filter(Boolean).join("\n");
+}
+
+/* ---------------- wiring ---------------- */
+async function handle(file){
+ if(!file)return;
+ $("#drop").querySelector(".big").innerHTML='<span class="spin"></span>Analyzing…';
+ try{const r=await analyze(file);history.unshift(r);if(history.length>12)history.pop();render(r);}
+ catch(e){toast("Could not read file");console.error(e);}
+ finally{$("#drop").querySelector(".big").textContent="Drop a file to inspect";}
+}
+$("#file").addEventListener("change",e=>handle(e.target.files[0]));
+["dragenter","dragover"].forEach(ev=>$("#drop").addEventListener(ev,e=>{e.preventDefault();$("#drop").classList.add("over");}));
+["dragleave","drop"].forEach(ev=>$("#drop").addEventListener(ev,e=>{e.preventDefault();$("#drop").classList.remove("over");}));
+$("#drop").addEventListener("drop",e=>handle(e.dataTransfer.files[0]));
+$("#another").addEventListener("click",()=>{$("#report").classList.add("hidden");$("#landing").classList.remove("hidden");$("#file").value="";window.scrollTo({top:0,behavior:"smooth"});});
+$("#copyreport").addEventListener("click",()=>copyText(textReport(R),"Report copied"));
+$("#copyioc").addEventListener("click",()=>copyText(iocJSON(R),"IOCs copied"));
+
+/* built-in sample: a disguised "PDF" that is really a PE, with telltale strings.
+   Built in-memory so the page is never empty — clicking shows a full real report. */
+$("#loadsample").addEventListener("click",()=>{
+ const parts=[];
+ const head=new Uint8Array([0x4D,0x5A,0x90,0x00,0x03,0x00,0x00,0x00,0x04,0x00,0x00,0x00,0xFF,0xFF,0x00,0x00]);
+ parts.push(head);
+ const stub="This program cannot be run in DOS mode.\0";
+ const apis=["KERNEL32.dll","USER32.dll","WININET.dll",
+  "CreateProcessA","VirtualAllocEx","WriteProcessMemory","CreateRemoteThread",
+  "LoadLibraryA","GetProcAddress","URLDownloadToFileA","InternetOpenA",
+  "RegSetValueExA","SetWindowsHookExA",
+  "http://185.220.101.4/gate.php","http://malicious-update.top/payload.bin",
+  "evil-c2-domain.xyz","92.63.197.48",
+  "powershell -nop -enc SQBFAFgAIAAoAE4AZQB3AC0ATwBiAGoAZQBjAHQA",
+  "Software\\Microsoft\\Windows\\CurrentVersion\\Run",
+  "C:\\Users\\victim\\AppData\\Roaming\\svchost.exe",
+  "schtasks /create /tn Updater /tr payload.exe",
+  "contact: handler@evil-c2-domain.xyz"];
+ const enc=new TextEncoder();
+ parts.push(enc.encode(stub));
+ apis.forEach(a=>{parts.push(enc.encode("\0\0"+a+"\0\0"));});
+ // pad with pseudo-random high-entropy "packed" tail
+ const tail=new Uint8Array(6000);for(let i=0;i<tail.length;i++)tail[i]=Math.floor(Math.random()*256);
+ parts.push(tail);
+ let len=parts.reduce((a,p)=>a+p.length,0);
+ const bytes=new Uint8Array(len);let o=0;parts.forEach(p=>{bytes.set(p,o);o+=p.length;});
+ const file=new File([bytes],"invoice_scan.pdf.exe",{type:"application/octet-stream"});
+ handle(file);
+});
+</script>
